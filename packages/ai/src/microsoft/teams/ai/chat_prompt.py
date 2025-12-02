@@ -43,6 +43,7 @@ class ChatPrompt:
         self,
         model: AIModel,
         *,
+        memory: Memory | None = None,
         functions: list[Function[Any]] | None = None,
         plugins: list[AIPluginProtocol] | None = None,
     ):
@@ -51,10 +52,12 @@ class ChatPrompt:
 
         Args:
             model: AI model implementation for text generation
+            memory: Optional default memory for conversation persistence
             functions: Optional list of functions the model can call
             plugins: Optional list of plugins for extending functionality
         """
         self.model = model
+        self.memory = memory
         self.functions: dict[str, Function[Any]] = {func.name: func for func in functions} if functions else {}
         self.plugins: list[AIPluginProtocol] = plugins or []
 
@@ -147,7 +150,8 @@ class ChatPrompt:
 
         Args:
             input: Message to send (string will be converted to UserMessage)
-            memory: Optional memory for conversation context
+            memory: Optional memory for conversation context.
+                    If not provided, uses the default memory set in constructor
             on_chunk: Optional callback for streaming response chunks
             instructions: Optional system message to guide model behavior
 
@@ -176,7 +180,7 @@ class ChatPrompt:
         response = await self.model.generate_text(
             current_input,
             system=current_system_message,
-            memory=memory,
+            memory=memory or self.memory,
             functions=wrapped_functions,
             on_chunk=on_chunk_fn if on_chunk else None,
         )
@@ -185,7 +189,12 @@ class ChatPrompt:
 
         return ChatSendResult(response=current_response)
 
-    def _wrap_function_handler(self, original_handler: FunctionHandlers, function_name: str) -> FunctionHandlers:
+    def _wrap_function_handler(
+        self,
+        original_handler: FunctionHandlers,
+        function_name: str,
+        parameter_schema: type[BaseModel] | Dict[str, Any] | None,
+    ) -> FunctionHandlers:
         """
         Wrap a function handler with plugin before/after hooks.
 
@@ -226,6 +235,9 @@ class ChatPrompt:
                     current_result = plugin_result
 
             return current_result
+
+        if parameter_schema is None:
+            return lambda: wrapped_handler(None)
 
         return wrapped_handler
 
@@ -283,7 +295,7 @@ class ChatPrompt:
                 name=func.name,
                 description=func.description,
                 parameter_schema=func.parameter_schema,
-                handler=self._wrap_function_handler(func.handler, func.name),
+                handler=self._wrap_function_handler(func.handler, func.name, func.parameter_schema),
             )
 
         return wrapped_functions

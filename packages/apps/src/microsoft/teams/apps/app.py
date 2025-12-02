@@ -21,6 +21,8 @@ from microsoft.teams.api import (
     ConversationAccount,
     ConversationReference,
     Credentials,
+    FederatedIdentityCredentials,
+    ManagedIdentityCredentials,
     MessageActivityInput,
     TokenCredentials,
 )
@@ -84,10 +86,8 @@ class App(ActivityHandlerMixin):
         self.credentials = self._init_credentials()
 
         self._token_manager = TokenManager(
-            http_client=self.http_client,
             credentials=self.credentials,
             logger=self.log,
-            default_connection_name=self.options.default_connection_name,
         )
 
         self.container = Container()
@@ -101,6 +101,7 @@ class App(ActivityHandlerMixin):
         self.api = ApiClient(
             "https://smba.trafficmanager.net/teams",
             self.http_client.clone(ClientOptions(token=self._get_bot_token)),
+            self.options.api_client_settings,
         )
 
         plugins: List[PluginBase] = list(self.options.plugins)
@@ -114,11 +115,7 @@ class App(ActivityHandlerMixin):
                 break
 
         if not http_plugin:
-            app_id = None
-            if self.credentials and hasattr(self.credentials, "client_id"):
-                app_id = self.credentials.client_id
-
-            http_plugin = HttpPlugin(app_id, self.log, self.options.skip_auth)
+            http_plugin = HttpPlugin(logger=self.log, skip_auth=self.options.skip_auth)
 
         plugins.insert(0, http_plugin)
         self.http = cast(HttpPlugin, http_plugin)
@@ -135,6 +132,7 @@ class App(ActivityHandlerMixin):
             self.options.default_connection_name,
             self.http_client,
             self._token_manager,
+            self.options.api_client_settings,
         )
         self.event_manager = EventManager(self._events, self.activity_processor)
         self.activity_processor.event_manager = self.event_manager
@@ -291,6 +289,7 @@ class App(ActivityHandlerMixin):
         client_secret = self.options.client_secret or os.getenv("CLIENT_SECRET")
         tenant_id = self.options.tenant_id or os.getenv("TENANT_ID")
         token = self.options.token
+        managed_identity_client_id = self.options.managed_identity_client_id or os.getenv("MANAGED_IDENTITY_CLIENT_ID")
 
         self.log.debug(f"Using CLIENT_ID: {client_id}")
         if not tenant_id:
@@ -298,13 +297,38 @@ class App(ActivityHandlerMixin):
         else:
             self.log.debug(f"Using TENANT_ID: {tenant_id} (assuming single-tenant app)")
 
-        # - If client_id + client_secret : use ClientCredentials (standard client auth)
         if client_id and client_secret:
+            self.log.debug("Using client secret for auth")
             return ClientCredentials(client_id=client_id, client_secret=client_secret, tenant_id=tenant_id)
 
-        # - If client_id + token callable : use TokenCredentials (where token is a custom token provider)
         if client_id and token:
             return TokenCredentials(client_id=client_id, tenant_id=tenant_id, token=token)
+
+        if client_id:
+            if managed_identity_client_id == "system":
+                self.log.debug("Using Federated Identity Credentials with system-assigned managed identity")
+                return FederatedIdentityCredentials(
+                    client_id=client_id,
+                    managed_identity_type="system",
+                    managed_identity_client_id=None,
+                    tenant_id=tenant_id,
+                )
+
+            if managed_identity_client_id and managed_identity_client_id != client_id:
+                self.log.debug("Using Federated Identity Credentials with user-assigned managed identity")
+                return FederatedIdentityCredentials(
+                    client_id=client_id,
+                    managed_identity_type="user",
+                    managed_identity_client_id=managed_identity_client_id,
+                    tenant_id=tenant_id,
+                )
+
+            self.log.debug("Using user-assigned managed identity (direct)")
+            mi_client_id = managed_identity_client_id or client_id
+            return ManagedIdentityCredentials(
+                client_id=mi_client_id,
+                tenant_id=tenant_id,
+            )
 
         return None
 

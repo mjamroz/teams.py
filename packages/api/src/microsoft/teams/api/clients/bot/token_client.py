@@ -6,10 +6,12 @@ Licensed under the MIT License.
 import inspect
 from typing import Literal, Optional, Union
 
+from microsoft.teams.api.auth.credentials import ClientCredentials
 from microsoft.teams.common.http import Client, ClientOptions
 from pydantic import BaseModel
 
 from ...auth import Credentials, TokenCredentials
+from ..api_client_settings import ApiClientSettings, merge_api_client_settings
 from ..base_client import BaseClient
 
 
@@ -38,13 +40,19 @@ class GetBotTokenResponse(BaseModel):
 class BotTokenClient(BaseClient):
     """Client for managing bot tokens."""
 
-    def __init__(self, options: Union[Client, ClientOptions, None] = None) -> None:
+    def __init__(
+        self,
+        options: Union[Client, ClientOptions, None] = None,
+        api_client_settings: Optional[ApiClientSettings] = None,
+    ) -> None:
         """Initialize the bot token client.
 
         Args:
             options: Optional Client or ClientOptions instance.
+            api_client_settings: Optional API client settings.
         """
         super().__init__(options)
+        self._api_client_settings = merge_api_client_settings(api_client_settings)
 
     async def get(self, credentials: Credentials) -> GetBotTokenResponse:
         """Get a bot token.
@@ -68,6 +76,10 @@ class BotTokenClient(BaseClient):
                 expires_in=-1,
                 access_token=token,
             )
+
+        assert isinstance(credentials, ClientCredentials), (
+            "Bot token client currently only supports Credentials with secrets."
+        )
 
         tenant_id = credentials.tenant_id or "botframework.com"
         res = await self.http.post(
@@ -105,6 +117,10 @@ class BotTokenClient(BaseClient):
                 expires_in=-1,
                 access_token=token,
             )
+
+        assert isinstance(credentials, ClientCredentials), (
+            "Bot token client currently only supports Credentials with secrets."
+        )
 
         tenant_id = credentials.tenant_id or "botframework.com"
         res = await self.http.post(
