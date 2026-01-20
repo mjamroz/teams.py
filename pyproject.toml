@@ -1,3 +1,7 @@
+[project]
+name = "a"
+version = "1"
+
 [tool.uv.sources]
 "microsoft-teams-apps" = { workspace = true }
 "microsoft-teams-api" = { workspace = true }
