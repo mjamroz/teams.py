@@ -5,7 +5,8 @@ Licensed under the MIT License.
 
 from typing import Literal, Optional
 
-from ....models import ConversationReference, MessagingExtensionAction
+from ....models import ConversationReference, MessagingExtensionAction, MessageReaction
+
 from ...invoke_activity import InvokeActivity
 
 
@@ -25,3 +26,5 @@ class MessageExtensionFetchTaskInvokeActivity(InvokeActivity):
 
     relates_to: Optional[ConversationReference] = None
     """A reference to another conversation or activity."""
+
+    reactions: list[MessageReaction] | None = None
