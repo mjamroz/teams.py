@@ -26,6 +26,9 @@ dev = [
     "pyright>=1.1.404",
     "cookiecutter>=2.6.0",
 ]
+release = [
+    "nbgv-python>=0.1.8",
+]
 
 [tool.ruff]
 line-length = 120
@@ -46,11 +49,15 @@ select = ["E", "F", "W", "B", "Q", "I", "ASYNC"]
 "packages/cards/**/*.py" = ["E501"]
 "packages/cards/**/__init__.py" = ["F403"]
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [tool.poe.tasks]
 fmt = "ruff format"
 lint = "ruff check"
 check = ["fmt", "lint"]
 test = "pytest"
+generate-activity-handlers = "python packages/apps/scripts/generate_handlers.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["packages/*"]

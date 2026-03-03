@@ -54,9 +54,7 @@ def _get_graph_client(token: Token):
         return get_graph_client(token)
     except ImportError as exc:
         raise ImportError(
-            "Graph functionality not available. "
-            "Install with 'uv add microsoft-teams-apps[graph]' (recommended) "
-            "or 'pip install microsoft-teams-apps[graph]'"
+            "Graph functionality not available. Install with 'pip install microsoft-teams-apps[graph]'"
         ) from exc
 
 
@@ -177,7 +175,7 @@ class ActivityContext(Generic[T]):
 
         Args:
             message: The message to send, can be a string, ActivityParams, or AdaptiveCard
-            conversation_id: Optional conversation ID to override the current conversation reference
+            conversation_ref: Optional conversation reference to override the current conversation reference
         """
         if isinstance(message, str):
             activity = MessageActivityInput(text=message)
@@ -185,6 +183,16 @@ class ActivityContext(Generic[T]):
             activity = MessageActivityInput().add_card(message)
         else:
             activity = message
+
+        # For targeted send, set the recipient if not already set.
+        # For targeted update (activity.id exists), we dont update recipient since recipient cannot be changed.
+        if (
+            isinstance(activity, MessageActivityInput)
+            and activity.is_targeted
+            and not activity.id
+            and not activity.recipient
+        ):
+            activity.recipient = self.activity.from_
 
         ref = conversation_ref or self.conversation_ref
         res = await self._plugin.send(activity, ref)

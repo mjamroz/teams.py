@@ -3,8 +3,8 @@ Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the MIT License.
 """
 
-import asyncio
 import importlib.metadata
+import inspect
 from contextlib import AsyncExitStack, asynccontextmanager
 from logging import Logger
 from pathlib import Path
@@ -34,6 +34,7 @@ from microsoft_teams.api import (
     ConversationReference,
     Credentials,
     InvokeResponse,
+    MessageActivityInput,
     SentActivity,
     TokenProtocol,
 )
@@ -242,11 +243,20 @@ class HttpPlugin(Sender):
         activity.from_ = ref.bot
         activity.conversation = ref.conversation
 
+        # Check if this is a targeted message
+        is_targeted = isinstance(activity, MessageActivityInput) and activity.is_targeted is True
+
         if hasattr(activity, "id") and activity.id:
-            res = await api.conversations.activities(ref.conversation.id).update(activity.id, activity)
+            if is_targeted:
+                res = await api.conversations.activities(ref.conversation.id).update_targeted(activity.id, activity)
+            else:
+                res = await api.conversations.activities(ref.conversation.id).update(activity.id, activity)
             return SentActivity.merge(activity, res)
 
-        res = await api.conversations.activities(ref.conversation.id).create(activity)
+        if is_targeted:
+            res = await api.conversations.activities(ref.conversation.id).create_targeted(activity)
+        else:
+            res = await api.conversations.activities(ref.conversation.id).create(activity)
         return SentActivity.merge(activity, res)
 
     async def _process_activity(
@@ -263,7 +273,7 @@ class HttpPlugin(Sender):
         result: InvokeResponse[Any]
         try:
             event = ActivityEvent(activity=activity, sender=self, token=token)
-            if asyncio.iscoroutinefunction(self.on_activity_event):
+            if inspect.iscoroutinefunction(self.on_activity_event):
                 result = await self.on_activity_event(event)
             else:
                 result = self.on_activity_event(event)
